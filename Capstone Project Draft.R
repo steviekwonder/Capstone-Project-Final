@@ -2,7 +2,7 @@
 ## Ultimately, the goal is to select schools that provide affordable tuition for those coming form low
 ## income backgrounds. Just as important is how well the university prepares these students for success 
 ## after graduation, which could be gaged by percentage of post-graduates earning above $25,000 a year.
-## Hence, we want less positive correlations between net price and post grad earnings.
+## Hence, we want less positive linear relationship between net price and post grad earnings.
 ## We want less significant correlations between loans and post grad earnings. 
 ## We want less significant correlations between post grad debt and earnings. 
 ## We want smaller percentage of people needing loans.
@@ -49,7 +49,8 @@
 ## 4. The average percentage of student population receiving some sort of loan. Let's observe the frequency  
 ## distributions and the average loan percentages for public, private non-profit and private for-profit universities.  
   library(ggplot2)
-  ggplot(college_edit, aes(x = PCTFLOAN, col = CONTROL)) + geom_freqpoly() + facet_grid(.~CONTROL) 
+  ggplot(college_edit, aes(x = PCTFLOAN)) + geom_freqpoly() + ggtitle("Average Undergraduate Loan Percentages (AULP)") 
+  ggplot(college_edit, aes(x = PCTFLOAN, col = CONTROL)) + geom_freqpoly() + ggtitle("AULP Partitioned by CONTROL")
 
   loans_by_CONTROL <- college_edit %>%
                           group_by(CONTROL) %>%
@@ -60,10 +61,35 @@
   netPrice_by_CONTROL <- college_edit %>%
                             group_by(CONTROL) %>% 
                             summarise(avgNetPrice <- mean(NETPRICE, na.rm = TRUE)) # $8012.64 for public, $16751.61 for non-profit, $16744.82 for for-profit
-    
-  ggplot(college_edit, aes(x = NETPRICE, col = CONTROL)) + geom_freqpoly() + facet_grid(.~CONTROL) 
-    
-## 6. Divide up dataset into public, private non-profit and private for-profit.
+  
+## 6. What about earning annual salaries above $25,000 after graduation?  geom_freqpoly() 
+  ggplot(college_edit, aes(x = GT_25K_P6)) + geom_freqpoly() + ggtitle("% of Graduates Earning > 25K") 
+  ggplot(college_edit, aes(x = GT_25K_P6, col = CONTROL)) + geom_freqpoly() + ggtitle("% of Graduates Earning > 25K Partitioned by CONTROL") 
+  
+  earnings_by_CONTROL <- college_edit %>%
+                            group_by(CONTROL) %>%
+                            summarise(avgEarnings <- mean(GT_25K_P6, na.rm = TRUE)) # public - 54.0%, non-profit - 61.3%, for-profit - 40.7% 
+
+## 7. Look at relationships between different variables. 
+  summary(lm(GT_25K_P6 ~ PCTFLOAN, data = college_edit)) # 0.0856   
+  summary(lm(GT_25K_P6 ~ NETPRICE, data = college_edit)) # 3.379e-06 
+  summary(lm(GT_25K_P6 ~ GRAD_DEBT_MDN_SUPP, data = college_edit)) # 1.005e-05
+ 
+## 8. Linear Regression
+  modelOne <- lm(GT_25K_P6 ~ GRAD_DEBT_MDN_SUPP + PCTFLOAN + RELAFFIL, data = college_edit)
+  modelTwo <- lm(GT_25K_P6 ~ NETPRICE*PCTFLOAN, data = college_edit)
+  modelThree <- lm(GRAD_DEBT_MDN_SUPP ~ NETPRICE + PCTFLOAN + RELAFFIL + GT_25K_P6, data = college_edit)
+  modelFour <- lm(GRAD_DEBT_MDN_SUPP ~ NETPRICE*PCTFLOAN, data = college_edit)
+  summary(modelOne)
+  summary(modelTwo)
+  summary(modelThree)
+  summary(modelFour)
+
+  # Cross validation for these regressions.
+    library(boot)
+    MSE <- cv.glm(college_edit, modelOne, K=10)$delta
+
+## 9. Divide up dataset into public, private non-profit and private for-profit.
   college_public <- subset(college_edit, college_edit$CONTROL == "public")
   college_public <- subset(college_public, select = -RELAFFIL) 
         
@@ -72,44 +98,7 @@
   college_forProfit <- subset(college_edit, college_edit$CONTROL == "for_profit") 
   college_forProfit <- subset(college_forProfit, select = -RELAFFIL)
         
-## 7. What about earning annual salaries above $25,000 after graduation?  geom_freqpoly() 
-  ggplot(college_edit, aes(x = GT_25K_P6)) + geom_freqpoly() + facet_grid(.~CONTROL)
-
-## 8a. Correlations for public, private non-profit and private for-profit universities. The correlations that I care about are 
-## between post grad earnings and loans, net price and post grad earnings, and post grad earnings and college debt.   
- 
-  # public universities
-    cor(college_public[,4:7], use = "pairwise.complete.obs") # 0.58 between GT_25K_P6 and PCTFLOAN,  
-                                                             # 0.44 between NETPRICE and GT_25K_P6,
-                                                             # 0.46 between GT_25K_P6 and GRAD_DEBT
-                                                    
-  # private non-profit
-    cor(college_nonProfit[,4:8], use = "pairwise.complete.obs") # 0.2 between PCTFLOAN and GT_25K, 
-                                                                # 0.22 between NETPRICE and GT_25K,
-                                                                # 0.17 between GT_25K_P6 and GRAD_DEBT
-                                                          
-  # private for-profit
-    cor(college_forProfit[,4:7], use = "pairwise.complete.obs") # 0.28 between PCTFLOAN and GT_25K, 
-                                                                # 0.49 between NETPRICE and GT_25K, 
-                                                                # 0.58 between GT_25K_P6 and GRAD_DEBT
-## 8b. All the universities combined. 
- cor(college_edit[,4:8], use = "pairwise.complete.obs") # 0.13 between GT_25K_P6 and PCTFLOAN
-                                                        # 0.14 between NETPRICE and GT_25K_P6
-                                                        # 0.48 between GT_25K_P6 and GRAD_DEBT
- 
-  # Linear Regression
-    modelOne <- lm(GT_25K_P6 ~ GRAD_DEBT_MDN_SUPP + PCTFLOAN + RELAFFIL, data = college_edit)
-    modelTwo <- lm(GT_25K_P6 ~ NETPRICE, data = college_edit)
-    modelThree <- lm(GRAD_DEBT_MDN_SUPP ~ NETPRICE*PCTFLOAN, data = college_edit)
- 
-  # Cross validation for these regressions.
-    install.packages("DAAG")
-    library(DAAG)
-    set.seed(1234)
-    MSE <- cv.lm(college_edit, modelOne, m=10)
-    cv.lm(college_edit, modelTwo, m=5)
- 
-## 9. Dplyr methods: With the chaining method, reduce the list to universities with dersired qualities: 
+## 10. Dplyr methods: With the chaining method, reduce the list to universities with dersired qualities: 
 ## We want universities with net price noticably lower than the national average.
 ## We want universities with education debt less than $20,000, since a $25,000 college debt is considered payable for those earning 30 to 40K a year.
 ## We want to have successful graduates so GT_25K_P6 over 70% or 0.7. Then observe the correlations for each set.
@@ -118,42 +107,29 @@
     topPubChoices  <-  college_public %>%
                          filter(NETPRICE < 7000 & GRAD_DEBT_MDN_SUPP < 20000 & GT_25K_P6 > 0.7) %>%
                          arrange(desc(GT_25K_P6)) 
-  
-    cor(topPubChoices[,4:7], use = "pairwise.complete.obs") # 0.024 between GT_25K_P6 and PCTFLOAN,  
-                                                            # 0.33 between NETPRICE and GT_25K_P6, 
-                                                            # 0.89 between GRAD_DEBT and GT_25K
   # private non-profit universities
     topNonProfitChoices  <-  college_nonProfit %>%
                                filter(NETPRICE < 12000 & GRAD_DEBT_MDN_SUPP < 20000 & GT_25K_P6 > 0.7) %>%
                                arrange(desc(GT_25K_P6)) 
-     
-    cor(topNonProfitChoices[,4:8], use = "pairwise.complete.obs") # -0.065 between PCTFLOAN and GT_25K
-                                                                  # 0.176 between NETPRICE and GT_25K,
-                                                                  # -0.25 between GRAD_DEBT and GT_25K
   # private for-profit universities
     topForProfitChoices <- college_forProfit %>%
                              filter(NETPRICE < 12000 & GRAD_DEBT_MDN_SUPP < 20000 & GT_25K_P6 > 0.7) %>%
                              arrange(desc(GT_25K_P6))
-      
-    cor(topForProfitChoices[,4:7], use = "pairwise.complete.obs") # -0.19 between PCTFLOAN and GT_25K
-                                                                  # -0.28 between NETPRICE and GT_25K,
-                                                                  # 0.3 between GRAD_DEBT and GT_25K
  
-## 10. Combine the public, private non-profit and private for-profit universities with our desired qualities.
+## 11. Combine the public, private non-profit and private for-profit universities with our desired qualities.
 ## Then, let's observe correlations and linear models. 
   topChoices <- merge(topPubChoices, topNonProfitChoices, all = TRUE)
   topChoices <- merge(topChoices, topForProfitChoices, all = TRUE)
   topChoices <- topChoices %>%
      arrange(desc(GT_25K_P6))
-  # correlations
-    cor(topChoices[,4:8], use = "pairwise.complete.obs") # -0.07 between PCTFLOAN and GT_25K
-                                                         # 0.26 between NETPRICE and GT_25K
-                                                         # -0.07 between GT_25K and GRAD_DEBT
-  # linear regressions
-    modelFour <- lm(GT_25K_P6 ~ GRAD_DEBT_MDN_SUPP + PCTFLOAN + RELAFFIL, data = topChoices)
-    modelFive <- lm(GT_25K_P6 ~ NETPRICE, data = topChoices)
-    modelSix <- lm(GRAD_DEBT_MDN_SUPP ~ NETPRICE*PCTFLOAN, data = topChoices)
-
+  # Relationships I am interested in. 
+    summary(lm(GT_25K_P6 ~ PCTFLOAN, data = topChoices)) # -0.024 
+    summary(lm(GT_25K_P6 ~ NETPRICE, data = topChoices)) # 5.012e-06
+    summary(lm(GT_25K_P6 ~ GRAD_DEBT_MDN_SUPP, data = topChoices)) # -1.153e-06
+  # Compare average religious affiliation scale for all private non-profits and the 
+  # private non-profits in our list
+    relaffilAll<- mean(college_nonProfit$RELAFFIL, na.rm = TRUE) # 25.8247
+    relaffilList <- mean(topNonProfitChoices$RELAFFIL, na.rm = TRUE) # 4.2121
   # Observe the new average net prices and loan percentages.
     newNetPrice_by_CONTROL <- topChoices %>%
                                 group_by(CONTROL) %>%
@@ -162,7 +138,7 @@
     newLoans_by_CONTROL <- topChoices %>%
                              group_by(CONTROL) %>%
                              summarise(newAvgLoans <- mean(PCTFLOAN, na.rm = TRUE))
-
+    
 ### Conclusion: 
 ## Here are some interestings trends in our new data sets. First off, while there are more private for-profit
 ## universities than public and private non-profit universities in the United States, there are more private
